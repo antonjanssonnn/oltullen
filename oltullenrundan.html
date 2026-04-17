@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Öltullenrundan GBG</title>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Oswald:wght@300;400;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+
+  <style>
+    :root {
+      --ink: #1a140e;
+      --parchment: #f2e8d5;
+      --amber: #c8821a;
+      --amber-light: #e8a83a;
+      --cream: #faf5ec;
+      --dark-brown: #2d1f10;
+      --dark-brown2: #1e1409;
+      --muted: #7a6a58;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html, body {
+      background-color: var(--dark-brown2);
+      color: var(--parchment);
+      font-family: 'Libre Baskerville', Georgia, serif;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    body::after {
+      content: '';
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+      opacity: 0.035;
+      pointer-events: none;
+    }
+
+    header {
+      text-align: center;
+      padding: 56px 24px 36px;
+      position: relative;
+      z-index: 2;
+    }
+
+    .eyebrow {
+      font-family: 'Oswald', sans-serif;
+      font-weight: 300;
+      font-size: 0.72rem;
+      letter-spacing: 0.35em;
+      text-transform: uppercase;
+      color: var(--amber);
+      margin-bottom: 14px;
+    }
+
+    h1 {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-size: clamp(2.8rem, 8vw, 6rem);
+      font-weight: 900;
+      line-height: 0.93;
+      color: var(--cream);
+      text-transform: uppercase;
+      letter-spacing: -0.02em;
+    }
+
+    h1 span { display: block; color: var(--amber); }
+
+    .subtitle {
+      margin-top: 18px;
+      font-family: 'Libre Baskerville', serif;
+      font-style: italic;
+      font-size: 1rem;
+      color: var(--muted);
+      line-height: 1.7;
+    }
+
+    .divider {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin: 28px auto;
+      max-width: 260px;
+    }
+    .divider::before, .divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+    }
+    .divider::before { background: linear-gradient(to right, transparent, var(--amber)); }
+    .divider::after  { background: linear-gradient(to left,  transparent, var(--amber)); }
+    .divider-icon { font-size: 1.3rem; }
+
+    /* MAP */
+    .map-wrap {
+      position: relative;
+      z-index: 2;
+      margin: 0 auto;
+      max-width: 1100px;
+      padding: 0 20px;
+    }
+
+    .map-frame {
+      border: 1px solid rgba(200, 130, 26, 0.35);
+      border-radius: 4px;
+      overflow: hidden;
+      box-shadow: 0 0 0 1px rgba(200,130,26,0.08), 0 24px 80px rgba(0,0,0,0.65);
+    }
+
+    #map {
+      height: 560px;
+      width: 100%;
+      background: var(--dark-brown2);
+    }
+
+    /* Dark map tiles */
+    .leaflet-tile-pane {
+      filter: sepia(1) saturate(0.35) brightness(0.25) hue-rotate(8deg);
+    }
+
+    /* Beer marker */
+    .beer-marker-inner {
+      width: 44px;
+      height: 44px;
+      background: #1e1409;
+      border: 2.5px solid #c8821a;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.25rem;
+      box-shadow: 0 0 16px rgba(200,130,26,0.55), 0 3px 10px rgba(0,0,0,0.8);
+      position: relative;
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .beer-marker-inner:hover {
+      transform: scale(1.18);
+      box-shadow: 0 0 26px rgba(200,130,26,0.85), 0 4px 16px rgba(0,0,0,0.9);
+    }
+
+    .beer-marker-num {
+      position: absolute;
+      bottom: -3px;
+      right: -3px;
+      width: 17px;
+      height: 17px;
+      background: #c8821a;
+      border-radius: 50%;
+      font-family: 'Oswald', sans-serif;
+      font-weight: 700;
+      font-size: 9px;
+      color: #1e1409;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* Popup */
+    .leaflet-popup-content-wrapper {
+      background: #1e1409 !important;
+      border: 1px solid #c8821a !important;
+      border-radius: 3px !important;
+      box-shadow: 0 8px 40px rgba(0,0,0,0.8) !important;
+      padding: 0 !important;
+    }
+    .leaflet-popup-tip { background: #c8821a !important; }
+    .leaflet-popup-content { margin: 0 !important; min-width: 210px; }
+    .leaflet-popup-close-button { color: #7a6a58 !important; font-size: 18px !important; top: 6px !important; right: 8px !important; }
+
+    .popup-inner { padding: 18px 20px; }
+    .popup-stop  { font-family: 'Oswald', sans-serif; font-weight: 300; font-size: 0.6rem; letter-spacing: 0.25em; text-transform: uppercase; color: #c8821a; margin-bottom: 4px; }
+    .popup-name  { font-family: 'Playfair Display', serif; font-size: 1rem; font-weight: 700; color: #faf5ec; margin-bottom: 4px; line-height: 1.2; }
+    .popup-addr  { font-family: 'Libre Baskerville', serif; font-style: italic; font-size: 0.75rem; color: #7a6a58; margin-bottom: 14px; }
+    .popup-link  {
+      display: inline-block;
+      font-family: 'Oswald', sans-serif;
+      font-weight: 400;
+      font-size: 0.62rem;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: #1e1409;
+      background: #c8821a;
+      padding: 6px 13px;
+      border-radius: 2px;
+      text-decoration: none;
+    }
+    .popup-link:hover { background: #e8a83a; }
+
+    /* Stops list */
+    .stops-section {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 48px 20px 72px;
+      position: relative;
+      z-index: 2;
+    }
+
+    .stops-eyebrow {
+      font-family: 'Oswald', sans-serif;
+      font-weight: 300;
+      font-size: 0.7rem;
+      letter-spacing: 0.3em;
+      text-transform: uppercase;
+      color: var(--amber);
+      text-align: center;
+      margin-bottom: 30px;
+    }
+
+    .stops-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+      gap: 16px;
+    }
+
+    .stop-card {
+      display: flex;
+      align-items: flex-start;
+      gap: 16px;
+      padding: 20px;
+      background: rgba(26, 20, 14, 0.55);
+      border: 1px solid rgba(200, 130, 26, 0.15);
+      border-radius: 3px;
+      text-decoration: none;
+      color: inherit;
+      transition: border-color 0.25s, background 0.25s, transform 0.2s;
+      cursor: pointer;
+    }
+
+    .stop-card:hover {
+      border-color: rgba(200, 130, 26, 0.55);
+      background: rgba(200, 130, 26, 0.07);
+      transform: translateY(-2px);
+    }
+
+    .stop-num {
+      font-family: 'Playfair Display', serif;
+      font-size: 2rem;
+      font-weight: 900;
+      color: var(--amber);
+      line-height: 1;
+      min-width: 28px;
+    }
+
+    .stop-info .beer-e   { font-size: 1.15rem; display: block; margin-bottom: 4px; }
+    .stop-name {
+      font-family: 'Oswald', sans-serif;
+      font-weight: 600;
+      font-size: 0.8rem;
+      letter-spacing: 0.09em;
+      text-transform: uppercase;
+      color: var(--cream);
+      margin-bottom: 3px;
+    }
+    .stop-addr {
+      font-family: 'Libre Baskerville', serif;
+      font-style: italic;
+      font-size: 0.74rem;
+      color: var(--muted);
+      line-height: 1.5;
+      margin-bottom: 8px;
+    }
+    .maps-cta {
+      font-family: 'Oswald', sans-serif;
+      font-weight: 400;
+      font-size: 0.6rem;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--amber);
+      border-bottom: 1px solid rgba(200,130,26,0.3);
+      padding-bottom: 1px;
+    }
+
+    footer {
+      text-align: center;
+      padding: 32px 24px 48px;
+      border-top: 1px solid rgba(200, 130, 26, 0.12);
+      position: relative;
+      z-index: 2;
+    }
+
+    .footer-tagline {
+      font-family: 'Libre Baskerville', serif;
+      font-style: italic;
+      font-size: 0.95rem;
+      color: var(--amber);
+      margin-bottom: 10px;
+    }
+
+    footer small {
+      font-family: 'Oswald', sans-serif;
+      font-weight: 300;
+      font-size: 0.62rem;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(22px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    header         { animation: fadeUp 0.8s ease both; }
+    .map-wrap      { animation: fadeUp 0.8s 0.15s ease both; }
+    .stops-section { animation: fadeUp 0.8s 0.28s ease both; }
+    footer         { animation: fadeUp 0.8s 0.4s  ease both; }
+  </style>
+</head>
+<body>
+
+<header>
+  <p class="eyebrow">Göteborg &mdash; En pub-tur att minnas</p>
+  <h1>Öltullen<span>rundan</span></h1>
+  <p class="subtitle">Sex Öststugan Tullen. Ett Göteborg. Oändliga öl.</p>
+  <div class="divider"><span class="divider-icon">🍺</span></div>
+</header>
+
+<div class="map-wrap">
+  <div class="map-frame">
+    <div id="map"></div>
+  </div>
+</div>
+
+<div class="stops-section">
+  <p class="stops-eyebrow">Alla stopp &mdash; klicka för att flyga till platsen</p>
+  <div class="stops-grid" id="stopsList"></div>
+</div>
+
+<footer>
+  <p class="footer-tagline">Skål, Göteborg 🍻</p>
+  <small>Drick ansvarsfullt &mdash; Öltullenrundan GBG</small>
+</footer>
+
+<script>
+const stops = [
+  {
+    num: 1,
+    name: "Öststugan Tullen Johanneberg",
+    addr: "Utlandagatan 14, 412 61 Göteborg",
+    lat: 57.6905,
+    lng: 11.9720,
+    url: "https://maps.app.goo.gl/rHVKvVQWpp1gezfn7"
+  },
+  {
+    num: 2,
+    name: "Wärdshuset Tullen",
+    addr: "Kungsportsavenyen 32, 411 36 Göteborg",
+    lat: 57.6972,
+    lng: 11.9748,
+    url: "https://maps.app.goo.gl/yELeraJUFgibNxcGA"
+  },
+  {
+    num: 3,
+    name: "Öststugan Tullen Lejonet",
+    addr: "Friggagatan 27, 416 64 Göteborg",
+    lat: 57.7075,
+    lng: 11.9900,
+    url: "https://maps.app.goo.gl/nhmXggf2dh5vX6fC7"
+  },
+  {
+    num: 4,
+    name: "Öststugan Tullen Kville",
+    addr: "Herkulesgatan 3A, 417 03 Göteborg",
+    lat: 57.7185,
+    lng: 11.9618,
+    url: "https://maps.app.goo.gl/HpdV91n187BrrrgP6"
+  },
+  {
+    num: 5,
+    name: "Öststugan Tullen Majorna",
+    addr: "Mariagatan 15, 414 72 Göteborg",
+    lat: 57.6968,
+    lng: 11.9348,
+    url: "https://maps.app.goo.gl/AR4BdscsBTgRuW5R9"
+  },
+  {
+    num: 6,
+    name: "Öststugan Tullen Andra Lång",
+    addr: "Andra Långgatan 13, 413 03 Göteborg",
+    lat: 57.7013,
+    lng: 11.9548,
+    url: "https://maps.app.goo.gl/yfS5KDDqCQ73dQxbA"
+  }
+];
+
+// Init map
+const map = L.map('map', {
+  center: [57.7040, 11.9630],
+  zoom: 13,
+  zoomControl: true,
+  scrollWheelZoom: true
+});
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '© <a href="https://www.openstreetmap.org/copyright" style="color:#c8821a">OpenStreetMap</a>',
+  maxZoom: 19
+}).addTo(map);
+
+// Dashed route polyline
+const latlngs = stops.map(s => [s.lat, s.lng]);
+L.polyline(latlngs, {
+  color: '#c8821a',
+  weight: 2.5,
+  dashArray: '10, 7',
+  opacity: 0.9,
+  lineJoin: 'round'
+}).addTo(map);
+
+// Custom icon
+function beerIcon(num) {
+  return L.divIcon({
+    className: '',
+    iconSize: [44, 44],
+    iconAnchor: [22, 22],
+    popupAnchor: [0, -26],
+    html: `<div class="beer-marker-inner">🍺<span class="beer-marker-num">${num}</span></div>`
+  });
+}
+
+// Markers with popups
+const markers = [];
+stops.forEach(stop => {
+  const marker = L.marker([stop.lat, stop.lng], { icon: beerIcon(stop.num) }).addTo(map);
+  marker.bindPopup(`
+    <div class="popup-inner">
+      <div class="popup-stop">Stopp ${stop.num}</div>
+      <div class="popup-name">${stop.name}</div>
+      <div class="popup-addr">${stop.addr}</div>
+      <a class="popup-link" href="${stop.url}" target="_blank" rel="noopener">Öppna i Maps ↗</a>
+    </div>
+  `);
+  markers.push(marker);
+});
+
+// Stop cards
+const grid = document.getElementById('stopsList');
+stops.forEach((stop, i) => {
+  const card = document.createElement('div');
+  card.className = 'stop-card';
+  card.innerHTML = `
+    <div class="stop-num">${stop.num}</div>
+    <div class="stop-info">
+      <span class="beer-e">🍺</span>
+      <div class="stop-name">${stop.name}</div>
+      <div class="stop-addr">${stop.addr}</div>
+      <span class="maps-cta">Visa på karta ↗</span>
+    </div>
+  `;
+  card.addEventListener('click', () => {
+    map.flyTo([stop.lat, stop.lng], 15, { duration: 1.4, easeLinearity: 0.4 });
+    setTimeout(() => markers[i].openPopup(), 1500);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+  grid.appendChild(card);
+});
+</script>
+
+</body>
+</html>
